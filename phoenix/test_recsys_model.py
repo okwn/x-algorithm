@@ -307,3 +307,59 @@ class TestNormalizeContinuousValue:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestBlockUserReduce:
+    """Tests for block_user_reduce."""
+
+    def test_output_shape(self):
+        """Output embedding has correct shape [B, 1, D]."""
+        B, num_hashes, D = 2, 4, 128
+        user_hashes = jnp.ones((B, num_hashes), dtype=jnp.int32)
+        user_embeddings = jnp.ones((B, num_hashes, D), dtype=jnp.float32)
+        emb, mask = block_user_reduce(user_hashes, user_embeddings, num_hashes, D)
+        assert emb.shape == (B, 1, D)
+        assert mask.shape == (B, 1)
+
+    def test_padding_mask_false_when_hash_zero(self):
+        """Padding mask is True only where first hash is non-zero."""
+        B, num_hashes, D = 3, 4, 64
+        user_hashes = jnp.array([[1, 0, 0, 0], [0, 0, 0, 0], [1, 2, 3, 4]], dtype=jnp.int32)
+        user_embeddings = jnp.ones((B, num_hashes, D), dtype=jnp.float32)
+        _, mask = block_user_reduce(user_hashes, user_embeddings, num_hashes, D)
+        assert bool(mask[0, 0]) is True   # hash 1 → valid
+        assert bool(mask[1, 0]) is False   # hash 0 → padding
+        assert bool(mask[2, 0]) is True   # hash 1 → valid
+
+    def test_empty_batch(self):
+        """Works with B=0 (empty batch)."""
+        B, num_hashes, D = 0, 4, 64
+        user_hashes = jnp.zeros((B, num_hashes), dtype=jnp.int32)
+        user_embeddings = jnp.ones((B, num_hashes, D), dtype=jnp.float32)
+        emb, mask = block_user_reduce(user_hashes, user_embeddings, num_hashes, D)
+        assert emb.shape == (0, 1, D)
+        assert mask.shape == (0, 1)
+
+
+class TestBlockHistoryReduce:
+    """Tests for block_history_reduce."""
+
+    def test_output_shape(self):
+        """Output embedding has correct shape [B, seq_len, D]."""
+        B, seq_len, D = 2, 16, 128
+        history_embeddings = jnp.ones((B, seq_len, D), dtype=jnp.float32)
+        history_mask = jnp.ones((B, seq_len), dtype=jnp.bool_)
+        emb = block_history_reduce(history_embeddings, history_mask)
+        assert emb.shape == (B, seq_len, D)
+
+    def test_mask_zeros_produce_zero_output(self):
+        """Zero mask positions produce zero embeddings."""
+        B, seq_len, D = 2, 8, 64
+        history_embeddings = jnp.ones((B, seq_len, D), dtype=jnp.float32)
+        history_mask = jnp.array([[True, True, False, False, True, False, True, False]] * B, dtype=jnp.bool_)
+        emb = block_history_reduce(history_embeddings, history_mask)
+        # Masked positions should contribute zero
+        assert jnp.all(emb[:, 2, :] == 0)
+        assert jnp.all(emb[:, 3, :] == 0)
+        assert jnp.all(emb[:, 5, :] == 0)
+        assert jnp.all(emb[:, 7, :] == 0)
