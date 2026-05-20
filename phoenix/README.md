@@ -271,3 +271,37 @@ This will:
 ```shell
 uv run pytest test_recsys_model.py test_recsys_retrieval_model.py
 ```
+
+To run a single test file:
+
+```shell
+uv run pytest test_recsys_model.py -v
+```
+
+To run a specific test class:
+
+```shell
+uv run pytest test_recsys_model.py::TestBlockUserReduce -v
+```
+
+### Hardware Requirements
+
+Running the full pipeline (retrieval + ranking) requires a GPU or TPU with at least 8 GB of memory due to JAX's lazy array evaluation. Running tests only (`pytest`) works on CPU.
+
+### Troubleshooting
+
+**"artifacts/oss-phoenix-artifacts not found"**
+Download the artifacts zip from `phoenix/artifacts/oss-phoenix-artifacts.zip` (stored via Git LFS). If Git LFS is not installed:
+
+```shell
+git lfs install
+git lfs pull
+```
+
+Or manually download from the release artifacts.
+
+**JAX installation fails on CPU**
+CPU-only installation: `uv pip install jax jaxlib --find-links https://whl.jax.dev`
+
+**Out of memory on GPU**
+Reduce batch size in `run_pipeline.py` by setting `BATCH_SIZE=16` or lower in your environment.
