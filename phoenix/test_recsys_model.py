@@ -305,5 +305,50 @@ class TestNormalizeContinuousValue:
         np.testing.assert_allclose(np.array(result), [0.0, 0.0, 0.5, 1.0], atol=1e-6)
 
 
+class TestBlockCandidateReduce:
+    """Tests for block_candidate_reduce."""
+
+    def test_output_shapes(self):
+        """Candidate embedding [B, C, D] and padding mask [B, C]."""
+        B, C, num_item_hashes, num_author_hashes, D = 2, 8, 4, 3, 128
+        hashes = jnp.ones((B, C, num_item_hashes), dtype=jnp.int32)
+        post_emb = jnp.ones((B, C, num_item_hashes, D), dtype=jnp.float32)
+        author_emb = jnp.ones((B, C, num_author_hashes, D), dtype=jnp.float32)
+        surface_emb = jnp.ones((B, C, D), dtype=jnp.float32)
+        emb, mask = block_candidate_reduce(
+            hashes, post_emb, author_emb, surface_emb, num_item_hashes, num_author_hashes
+        )
+        assert emb.shape == (B, C, D)
+        assert mask.shape == (B, C)
+
+    def test_padding_mask_false_when_hash_zero(self):
+        """Hash 0 in first position means padding."""
+        B, C, num_item_hashes, num_author_hashes, D = 2, 8, 4, 3, 128
+        hashes = jnp.ones((B, C, num_item_hashes), dtype=jnp.int32)
+        hashes = hashes.at[:, 3, :].set(0)  # row 3 all zeros → padding
+        post_emb = jnp.ones((B, C, num_item_hashes, D), dtype=jnp.float32)
+        author_emb = jnp.ones((B, C, num_author_hashes, D), dtype=jnp.float32)
+        surface_emb = jnp.ones((B, C, D), dtype=jnp.float32)
+        _, mask = block_candidate_reduce(
+            hashes, post_emb, author_emb, surface_emb, num_item_hashes, num_author_hashes
+        )
+        assert bool(mask[0, 2]) is True
+        assert bool(mask[0, 3]) is False
+
+    def test_with_post_age_embeddings(self):
+        """post_age_embeddings are included in concatenated output."""
+        B, C, num_item_hashes, num_author_hashes, D = 2, 4, 4, 3, 64
+        hashes = jnp.ones((B, C, num_item_hashes), dtype=jnp.int32)
+        post_emb = jnp.ones((B, C, num_item_hashes, D), dtype=jnp.float32)
+        author_emb = jnp.ones((B, C, num_author_hashes, D), dtype=jnp.float32)
+        surface_emb = jnp.ones((B, C, D), dtype=jnp.float32)
+        age_emb = jnp.ones((B, C, D), dtype=jnp.float32)
+        emb, mask = block_candidate_reduce(
+            hashes, post_emb, author_emb, surface_emb, num_item_hashes, num_author_hashes,
+            candidate_post_age_embeddings=age_emb
+        )
+        assert emb.shape == (B, C, D)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
